@@ -42,6 +42,8 @@ func main() {
 		log.Fatal("Please provide a starting URL using the -url or -sitemap parameter.")
 	}
 
+	start := time.Now()
+
 	sem := make(chan bool, maxConcurrency)
 	wg := &sync.WaitGroup{}
 
@@ -52,7 +54,8 @@ func main() {
 	}
 
 	wg.Wait()
-	report()
+
+	report(time.Since(start))
 }
 
 func sendRequest(u string) (*http.Response, error) {
@@ -73,6 +76,9 @@ func sendRequest(u string) (*http.Response, error) {
 			req.Header.Set(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
 		}
 	}
+
+	// Set User-Agent header
+	req.Header.Set("User-Agent", "CacheWarmer/1.0")
 
 	if username != "" && password != "" {
 		req.SetBasicAuth(username, password)
@@ -140,7 +146,7 @@ func crawl(u string, sem chan bool, wg *sync.WaitGroup) {
 				return
 			}
 
-			linkStr := absoluteURL.String()
+			linkStr := removeHashFromURL(absoluteURL.String())
 
 			lock.Lock()
 			if _, exists := visited[linkStr]; !exists {
@@ -150,6 +156,14 @@ func crawl(u string, sem chan bool, wg *sync.WaitGroup) {
 			lock.Unlock()
 		})
 	}()
+}
+
+func removeHashFromURL(u string) string {
+	hashIndex := strings.Index(u, "#")
+	if hashIndex != -1 {
+		return u[:hashIndex]
+	}
+	return u
 }
 
 func processSitemapURL(sitemapURL string, sem chan bool, wg *sync.WaitGroup) {
@@ -183,7 +197,7 @@ func processSitemapURL(sitemapURL string, sem chan bool, wg *sync.WaitGroup) {
 	}
 }
 
-func report() {
+func report(crawlTime time.Duration) {
 	fmt.Println("\nCrawling completed")
 
 	// Display each link and its status, with non-200 statuses in red
@@ -207,5 +221,6 @@ func report() {
 	// Total pages crawled
 	fmt.Println("\nSummary:")
 	totalPages := len(visited)
+	fmt.Printf("Total crawl time: %v\n", crawlTime)
 	fmt.Printf("Total pages crawled: %d\n", totalPages)
 }
