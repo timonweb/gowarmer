@@ -3,13 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/PuerkitoBio/goquery"
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
-	"strings"
-	"github.com/PuerkitoBio/goquery"
 )
 
 type PageData struct {
@@ -24,7 +24,6 @@ var verbose bool
 var maxConcurrency int
 var username, password string
 var customHeaders string
-
 
 func main() {
 	var startURL, sitemapURL string
@@ -103,19 +102,22 @@ func crawl(u string, sem chan bool, wg *sync.WaitGroup) {
 		res, err := sendRequest(u)
 		responseTime := time.Since(start)
 		if err != nil {
-			log.Printf("Error fetching %s: %v", u, err)
+			log.Printf("\u001B[31mError fetching %s: %v\u001B[0m\n", u, err)
 			return
 		}
 		defer res.Body.Close()
 
 		lock.Lock()
+		if verbose {
+			if res.StatusCode != 200 && res.StatusCode != 301 && res.StatusCode != 302 {
+				fmt.Printf("\u001B[31m%s | Status %v | Response Time: %v\u001B[0m\n", u, res.StatusCode, responseTime)
+			} else {
+				fmt.Printf("Crawled %s | Status %v | Response Time: %v\n", u, res.StatusCode, responseTime)
+			}
+		}
 		visited[u] = PageData{Response: *res, ResponseTime: responseTime}
 		statusCount[res.StatusCode]++
 		lock.Unlock()
-
-		if verbose {
-			fmt.Println("Crawling:", u)
-		}
 
 		doc, err := goquery.NewDocumentFromReader(res.Body)
 		if err != nil {
@@ -201,16 +203,16 @@ func report(crawlTime time.Duration) {
 	fmt.Println("\nCrawling completed")
 
 	// Display each link and its status, with non-200 statuses in red
-	fmt.Println("\nDetailed Report:")
-	for link, pageData := range visited {
-		if pageData.Response.StatusCode != 200 {
-			// ANSI escape code for red color: \033[31m
-			// ANSI escape code to reset color: \033[0m
-			fmt.Printf("\033[31m%s : %v | Response Time: %v\033[0m\n", link, pageData.Response.Status, pageData.ResponseTime)
-		} else {
-			fmt.Printf("%s : %v | Response Time: %v\n", link, pageData.Response.Status, pageData.ResponseTime)
-		}
-	}
+	//fmt.Println("\nDetailed Report:")
+	//for link, pageData := range visited {
+	//	if pageData.Response.StatusCode != 200 {
+	//		// ANSI escape code for red color: \033[31m
+	//		// ANSI escape code to reset color: \033[0m
+	//		fmt.Printf("\033[31m%s : %v | Response Time: %v\033[0m\n", link, pageData.Response.Status, pageData.ResponseTime)
+	//	} else {
+	//		fmt.Printf("%s : %v | Response Time: %v\n", link, pageData.Response.Status, pageData.ResponseTime)
+	//	}
+	//}
 
 	// Breakdown by status
 	fmt.Println("\nStatus Breakdown:")
